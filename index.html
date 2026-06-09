@@ -442,11 +442,15 @@ function renderBoard(){
       '<div class="board-empty">No flight booked yet — mark a card as BOOKED to start the countdown to Tokyo.</div>';
   }
 }
+// Effective current price (used by sort + CHEAPEST badge): live server-tracked low if present, else the card's logged price.
+function effectivePrice(f){
+  const sh=serverHistory(routeKey(f));
+  return (sh && sh.length) ? sh[sh.length-1] : latest(f);
+}
 function cheapestId(){
   let best=null, val=Infinity;
   state.flights.forEach(f=>{
-    const sh=serverHistory(routeKey(f));
-    const p=(sh && sh.length)? sh[sh.length-1] : latest(f);
+    const p=effectivePrice(f);
     if(p!=null && p<val){ val=p; best=f.id; }
   });
   return best;
@@ -459,7 +463,7 @@ function renderCards(){
   }
   const sort=document.getElementById("sortSel").value;
   let list=[...state.flights];
-  if(sort==="price") list.sort((a,b)=>( latest(a)??1e9)-(latest(b)??1e9));
+  if(sort==="price") list.sort((a,b)=>(effectivePrice(a)??1e9)-(effectivePrice(b)??1e9));
   else if(sort==="depart") list.sort((a,b)=>(new Date(a.depart||"2999")-new Date(b.depart||"2999")));
   else list.reverse();
   const cheap=cheapestId();
