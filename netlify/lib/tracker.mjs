@@ -36,6 +36,10 @@ export async function getWatchlist() {
   return DEFAULT_WATCHLIST;
 }
 
+// Hard cap on tracked routes — backstop so API usage stays contained even if a
+// client sends more. Mirrors the front-end's MAX_FLIGHTS limit.
+const MAX_ROUTES = 10;
+
 export async function setWatchlist(routes) {
   const seen = {};
   const out = [];
@@ -51,6 +55,7 @@ export async function setWatchlist(routes) {
       target_date: r.target_date || null,
       nights: Number(r.nights) > 0 ? Number(r.nights) : 8,
     });
+    if (out.length >= MAX_ROUTES) break;
   }
   const finalList = out.length ? out : DEFAULT_WATCHLIST;
   await db().setJSON("watchlist", finalList);

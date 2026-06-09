@@ -330,6 +330,7 @@
 
 <script>
 const KEY = "akiba_flight_tracker_v1";
+const MAX_FLIGHTS = 10; // cap tracked flights to keep SerpApi usage contained
 let state = { flights: [], openLogs:{} };
 let editStatus = "watching";
 
@@ -557,6 +558,10 @@ async function saveFromModal(){
     Object.assign(f,base);
     if(price!=null){ if(!f.history) f.history=[]; if(latest(f)!==price) f.history.push(price); }
   } else {
+    if(state.flights.length>=MAX_FLIGHTS){
+      alert("You're tracking the maximum of "+MAX_FLIGHTS+" flights. Delete one to add another.");
+      return;
+    }
     state.flights.push({ id:id(), ...base, history: price!=null?[price]:[] });
   }
   await save(); closeModal(); render();
@@ -696,7 +701,13 @@ function applyCheaperDates(route, best){
 }
 
 /* ---------- events ---------- */
-document.getElementById("addBtn").onclick=()=>openModal(null);
+document.getElementById("addBtn").onclick=()=>{
+  if(state.flights.length>=MAX_FLIGHTS){
+    alert("You're tracking the maximum of "+MAX_FLIGHTS+" flights. Delete one to add another — this keeps live price-tracking API usage contained.");
+    return;
+  }
+  openModal(null);
+};
 document.getElementById("refreshBtn").onclick=refreshPrices;
 document.querySelectorAll("#winSeg button").forEach(b=> b.onclick=()=>{
   scanMonths=Number(b.dataset.mo);
