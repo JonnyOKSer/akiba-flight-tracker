@@ -255,11 +255,11 @@
 
   <div class="controls">
     <button class="btn pink" id="addBtn" title="Add a flight option to track.">+ Add flight</button>
-    <div class="winseg" id="winSeg" title="Window used when scanning for the cheapest departure dates.">
-      <button data-mo="3" class="on" title="Scan for the best dates within the next 3 months.">NEXT 3 MO</button>
-      <button data-mo="6" title="Scan for the best dates within the next 6 months.">NEXT 6 MO</button>
+    <div class="winseg" id="winSeg" title="Window used by Refresh prices and FIND BEST DATES when scanning for the cheapest departure dates.">
+      <button data-mo="3" class="on" title="Scan the next 3 months for the best dates. Used by Refresh prices and FIND BEST DATES.">NEXT 3 MO</button>
+      <button data-mo="6" title="Scan the next 6 months for the best dates. Used by Refresh prices and FIND BEST DATES.">NEXT 6 MO</button>
     </div>
-    <button class="btn cyan" id="refreshBtn" title="Pull today's lowest fare for every watched route from Google Flights (uses one search per route).">⟳ Refresh prices</button>
+    <button class="btn cyan" id="refreshBtn" title="Pull today's lowest fare for every watched route AND rescan the selected 3/6-month window for each route. Costs ~1 + ~6 searches per route, so flipping the window then refreshing updates the 'cheapest in window' on every tile.">⟳ Refresh prices</button>
     <span class="spacer"></span>
     <span class="sort">SORT
       <select id="sortSel" title="Reorder the cards below.">
@@ -620,13 +620,25 @@ async function loadServerState(){
 }
 async function refreshPrices(){
   const btn=document.getElementById("refreshBtn");
-  btn.disabled=true; srvStatus("","<span class='dots'>Pulling today\u2019s fares from Google Flights</span>");
+  btn.disabled=true; srvStatus("","<span class='dots'>Pulling today\u2019s fares + scanning the "+scanMonths+"-month window</span>");
   try{
     await syncWatchlist();
     const r=await fetch("/.netlify/functions/api?action=refresh",{ method:"POST" });
     const d=await r.json();
     if(d.error) throw new Error(d.error);
     server={ ...d, available:true };
+    // Also rescan the selected 3/6-month window per route so tiles reflect the window choice.
+    const routes=(server.watchlist||[]).map(w=>w.route);
+    for(const route of routes){
+      try{
+        const br=await fetch("/.netlify/functions/api?action=best-dates",{
+          method:"POST", headers:{"Content-Type":"application/json"},
+          body:JSON.stringify({ route, months: scanMonths })
+        });
+        const bd=await br.json();
+        if(!bd.error && bd.route){ if(!server.best) server.best={}; server.best[route]=bd; }
+      }catch(_){ /* skip a failed route, keep the others */ }
+    }
     renderServerBar(); render();
   }catch(e){
     server.available=false;
