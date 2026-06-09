@@ -376,8 +376,16 @@ function seed(){
 }
 function id(){ return Math.random().toString(36).slice(2,9); }
 function esc(s){ return String(s==null?"":s).replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c])); }
-// Only allow real web links as booking URLs — blocks javascript:/data: etc. injected via a card's URL field.
-function safeUrl(u){ try{ const p=new URL(String(u),location.href); return (p.protocol==="http:"||p.protocol==="https:")?p.href:""; }catch(e){ return ""; } }
+// Only allow real web links as booking URLs. Empty → no link. Scheme-less input
+// (e.g. "united.com/...") gets https:// so it goes to the airline, not back to this app.
+// Still blocks javascript:/data: and other non-web schemes.
+function safeUrl(u){
+  const s=String(u==null?"":u).trim();
+  if(!s) return "";
+  const candidate=/^[a-z][a-z0-9+.-]*:/i.test(s) ? s : ("https://"+s);
+  try{ const p=new URL(candidate); return (p.protocol==="http:"||p.protocol==="https:")?p.href:""; }
+  catch(e){ return ""; }
+}
 const AIRPORTS={MCO:"Orlando",NRT:"Tokyo–Narita",HND:"Tokyo–Haneda",ICN:"Seoul–Incheon",
   YUL:"Montreal",ATL:"Atlanta",ORD:"Chicago O'Hare",SEA:"Seattle",DTW:"Detroit",
   JFK:"New York–JFK",IAD:"Washington–Dulles",EWR:"Newark",LAX:"Los Angeles",SFO:"San Francisco"};
