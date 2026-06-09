@@ -627,7 +627,8 @@ async function refreshPrices(){
     const d=await r.json();
     if(d.error) throw new Error(d.error);
     server={ ...d, available:true };
-    // Also rescan the selected 3/6-month window per route so tiles reflect the window choice.
+    // Dates are flexible: rescan the window per route and adopt the cheapest dates
+    // whenever they beat the tracked price, so tiles always show the lowest fare.
     const routes=(server.watchlist||[]).map(w=>w.route);
     for(const route of routes){
       try{
@@ -636,10 +637,11 @@ async function refreshPrices(){
           body:JSON.stringify({ route, months: scanMonths })
         });
         const bd=await br.json();
-        if(!bd.error && bd.route){ if(!server.best) server.best={}; server.best[route]=bd; }
+        if(!bd.error && bd.best) applyCheaperDates(route, bd.best);
       }catch(_){ /* skip a failed route, keep the others */ }
     }
-    renderServerBar(); render();
+    await syncWatchlist();    // persist any retargeted dates
+    await loadServerState();  // pull updated histories + best, then render
   }catch(e){
     server.available=false;
     srvStatus("err","Couldn\u2019t refresh: "+esc(String(e.message||e))+" — is SERPAPI_KEY set in Netlify?");
@@ -655,6 +657,7 @@ async function findBestDates(route){
     });
     const d=await r.json();
     if(d.error) throw new Error(d.error);
+    if(d.best){ applyCheaperDates(route, d.best); await syncWatchlist(); }
     await loadServerState();
   }catch(e){
     srvStatus("err","Scan failed: "+esc(String(e.message||e)));
@@ -665,6 +668,31 @@ function serverHistory(route){
   const h=server.histories ? server.histories[route] : null;
   if(!Array.isArray(h)) return null;
   return h.map(x=>x.price).filter(p=>typeof p==="number");
+}
+// Current tracked price for a route: live server low if present, else the card's logged price.
+function currentTrackedPrice(route){
+  const sh=serverHistory(route);
+  if(sh && sh.length) return sh[sh.length-1];
+  const f=state.flights.find(x=>routeKey(x)===route && x.status!=="booked");
+  return f? latest(f) : null;
+}
+// Dates are the flexible variable: when a scan finds a cheaper fare on different dates,
+// move the tracked card(s) to those dates so the lowest price becomes the tracked price.
+// Booked flights are locked and never moved.
+function applyCheaperDates(route, best){
+  if(!best || best.price==null) return false;
+  const cur=currentTrackedPrice(route);
+  if(cur!=null && best.price>=cur) return false;
+  let changed=false;
+  state.flights.forEach(f=>{
+    if(routeKey(f)===route && f.status!=="booked"){
+      if(best.outbound) f.depart=best.outbound;
+      if(best.ret) f.return=best.ret;
+      changed=true;
+    }
+  });
+  if(changed) save();
+  return changed;
 }
 
 /* ---------- events ---------- */

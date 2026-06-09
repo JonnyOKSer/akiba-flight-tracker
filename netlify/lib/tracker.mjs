@@ -149,7 +149,28 @@ export async function scanBestDates(route, months) {
     } catch (_) { /* skip a failed sample, keep going */ }
   }
 
-  const out = { route, months: m, nights, best, points, t: new Date().toISOString() };
+  // Dates are the flexible variable: if the cheapest in-window fare beats what we're
+  // currently tracking for this route, adopt it as the new tracked price + departure.
+  let adopted = false;
+  if (best) {
+    const hk = "history:" + route;
+    let hist = [];
+    try { hist = (await s.get(hk, { type: "json" })) || []; } catch (_) {}
+    const tail = hist.length ? hist[hist.length - 1].price : null;
+    if (tail == null || best.price < tail) {
+      const t = today();
+      hist = hist.filter((h) => h.t !== t);
+      hist.push({ t, price: best.price, outbound: best.outbound, ret: best.ret });
+      if (hist.length > 120) hist = hist.slice(-120);
+      await s.setJSON(hk, hist);
+      // retarget future daily tracking to the cheaper departure
+      const idx = wl.findIndex((x) => x.route === route);
+      if (idx >= 0) { wl[idx].target_date = best.outbound; await s.setJSON("watchlist", wl); }
+      adopted = true;
+    }
+  }
+
+  const out = { route, months: m, nights, best, points, adopted, t: new Date().toISOString() };
   await s.setJSON("best:" + route, out);
   return out;
 }
